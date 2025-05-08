@@ -10,6 +10,8 @@ public class CSharpAnalyzer
 
     private Dictionary<string, List<CSTypeMethod>> ExtendMethods { get; } = [];
 
+    private List<INamedTypeSymbol> namedTypeSymbols = new();
+
     public void AnalyzeType(INamedTypeSymbol namedType)
     {
         try
@@ -18,6 +20,13 @@ public class CSharpAnalyzer
             {
                 return;
             }
+
+            if (namedTypeSymbols.Contains(namedType))
+            {
+                return;
+            }
+
+            namedTypeSymbols.Add(namedType);
 
             CSType csType = namedType switch
             {
@@ -41,7 +50,8 @@ public class CSharpAnalyzer
         {
             foreach (var csType in CsTypes)
             {
-                if (ExtendMethods.TryGetValue(csType.Name, out var methods))
+                string fullName = csType.Namespace + "." + csType.Name;
+                if (ExtendMethods.TryGetValue(fullName, out var methods))
                 {
                     if (csType is IHasMethods hasMethods)
                     {
@@ -52,6 +62,8 @@ public class CSharpAnalyzer
 
             ExtendMethods.Clear();
         }
+
+        namedTypeSymbols.Clear();
 
         return CsTypes;
     }
@@ -87,6 +99,7 @@ public class CSharpAnalyzer
             method.Comment = summary;
         }
         method.IsStatic = methodSymbol.IsStatic;
+        method.Kind = methodSymbol.MethodKind;
         method.ReturnTypeName = methodSymbol.ReturnType.ToDisplayString();
         if (methodSymbol.IsExtensionMethod)
         {
@@ -105,14 +118,26 @@ public class CSharpAnalyzer
                     TypeName = it.Type.ToDisplayString(),
                     Comment = xmlDictionary.GetValueOrDefault(it.Name, "")
                 }).ToList();
-
-            if (ExtendMethods.TryGetValue(namedTypeSymbol.Name, out var extendMethod))
+            string fullName = "";
+            if (namedTypeSymbol.ContainingSymbol is INamespaceSymbol nsSymbol)
+            {
+                if (!nsSymbol.IsGlobalNamespace)
+                {
+                    fullName = nsSymbol.ToString()!;
+                }
+            }
+            else if (namedTypeSymbol.ContainingSymbol is INamedTypeSymbol ntSymbol)
+            {
+                fullName = ntSymbol.ToString()!;
+            }
+            fullName = fullName + "." + namedTypeSymbol.Name;
+            if (ExtendMethods.TryGetValue(fullName, out var extendMethod))
             {
                 extendMethod.Add(method);
             }
             else
             {
-                ExtendMethods.Add(namedTypeSymbol.Name, [method]);
+                ExtendMethods.Add(fullName, [method]);
             }
         }
         else
@@ -257,6 +282,7 @@ public class CSharpAnalyzer
             }
 
             hasNamespace.Namespace = nsSymbol.ToString()!;
+            hasNamespace.IsNamespace = true;
         }
         else if (symbol.ContainingSymbol is INamedTypeSymbol namedTypeSymbol)
         {

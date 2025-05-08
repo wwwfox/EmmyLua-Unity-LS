@@ -20,11 +20,24 @@ public class XLuaDumper : IDumper
         {
             Directory.CreateDirectory(outPath);
         }
-
+        Dictionary<string, bool> fullClassDic  = new ();
+        List<CSType> types = new List<CSType>();
+        foreach (CSType type in csTypes)
+        {
+            string fullClass = type.Namespace + type.Name;
+            if (fullClassDic.ContainsKey(fullClass))
+            {
+                continue;
+            }
+            fullClassDic[fullClass] = true;
+            types.Add(type);
+        }
+        HandleNamespace(types);
         var sb = new StringBuilder();
         ResetSb(sb);
-        foreach (var csType in csTypes)
+        foreach (var csType in types)
         {
+            
             switch (csType)
             {
                 case CSClassType csClassType:
@@ -52,6 +65,48 @@ public class XLuaDumper : IDumper
         }
 
         DumpNamespace(sb, outPath);
+    }
+
+    private void HandleNamespace(List<CSType> csTypes)
+    {
+        Dictionary<string, CSClassType> dicClass = new();
+        foreach (var csType in csTypes)
+        {
+            if (csType is CSClassType csClassType)
+            {
+                if (csClassType.Namespace.Length > 0)
+                {
+                    var firstNamespace = csClassType.Namespace.Split('.').FirstOrDefault();
+                    if (firstNamespace != null)
+                    {
+                        NamespaceDict.TryAdd(firstNamespace, true);
+                    }
+                }
+                else
+                {
+                    NamespaceDict.TryAdd(csClassType.Name, false);
+                }
+                var fullClassName = csClassType.Namespace.Length > 0 ? csClassType.Namespace + "." + csClassType.Name : csClassType.Name;
+                dicClass[fullClassName] = csClassType;
+            }
+        }
+        foreach (var csType in csTypes)
+        {
+            if (!csType.IsNamespace && csType.Namespace.Length > 0)
+            {
+
+                if (dicClass.TryGetValue(csType.Namespace, out var parent))
+                {
+                    parent.Fields.Add(new CSTypeField()
+                    {
+                        Name = csType.Name,
+                        TypeName = csType.Namespace + "." + csType.Name,
+                        Location = csType.Location,
+                        Comment = csType.Comment,
+                    });
+                }
+            }
+        }
     }
 
     private void DumpNamespace(StringBuilder sb, string outPath)
@@ -92,18 +147,7 @@ public class XLuaDumper : IDumper
 
     private void HandleCsClassType(CSClassType csClassType, StringBuilder sb)
     {
-        if (csClassType.Namespace.Length > 0)
-        {
-            var firstNamespace = csClassType.Namespace.Split('.').FirstOrDefault();
-            if (firstNamespace != null)
-            {
-                NamespaceDict.TryAdd(firstNamespace, true);
-            }
-        }
-        else
-        {
-            NamespaceDict.TryAdd(csClassType.Name, false);
-        }
+        
 
         var classFullName = csClassType.Name;
         if (csClassType.Namespace.Length > 0)
@@ -136,18 +180,54 @@ public class XLuaDumper : IDumper
         sb.AppendLine($"local {csClassType.Name} = {{}}");
         foreach (var csTypeField in csClassType.Fields)
         {
+            if (csTypeField.Name == "this[]" || Util.IsLuaKeywords(csTypeField.Name))
+            {
+                continue;
+            }
             WriteCommentAndLocation(csTypeField.Comment, csTypeField.Location, sb);
             sb.AppendLine($"---@type {Util.CovertToLuaTypeName(csTypeField.TypeName)}");
             sb.AppendLine($"{csClassType.Name}.{csTypeField.Name} = nil");
             sb.AppendLine();
         }
 
-        foreach (var csTypeMethod in csClassType.Methods)
+        List<CSTypeMethod> methods = new();
+        Dictionary<string, CSTypeMethod> eventMethods = new();
+
+        foreach (var method in csClassType.Methods)
         {
-            if (csTypeMethod.Name == ".ctor")
+            if (method.Name == ".ctor" || Util.IsLuaKeywords(method.Name))
             {
                 continue;
             }
+            if (method.Kind == MethodKind.EventAdd || method.Kind == MethodKind.EventRemove)
+            {
+                var name = method.Name.Replace("add_", "").Replace("remove_", "");
+                string op = method.Kind == MethodKind.EventAdd ? "\"+\"" : "\"-\"";
+                if (!eventMethods.ContainsKey(name))
+                {
+                    methods.Add(method);
+                    eventMethods.Add(name, method);
+                    method.Name = name;
+                    method.Params.Insert(0, new CSParam()
+                    {
+                        Name = "op",
+                        Nullable = false,
+                        TypeName = op
+                    });
+                }else
+                {
+                    var m = eventMethods[name];
+                    m.Params[0].TypeName += "|" + op;
+                }
+            }
+            else
+            {
+                methods.Add(method);
+            }
+        }
+
+        foreach (var csTypeMethod in methods)
+        {
 
             WriteCommentAndLocation(csTypeMethod.Comment, csTypeMethod.Location, sb);
 
@@ -287,7 +367,7 @@ public class XLuaDumper : IDumper
         }
 
         WriteCommentAndLocation(csEnumType.Comment, csEnumType.Location, sb);
-        WriteTypeAnnotation("enum", $"{classFullName}.Detail", string.Empty, [], [], sb);
+        WriteTypeAnnotation("enum", $"{classFullName}", string.Empty, [], [], sb);
         
         sb.AppendLine($"local {csEnumType.Name} = {{}}");
         foreach (var csTypeField in csEnumType.Fields)
@@ -298,18 +378,23 @@ public class XLuaDumper : IDumper
             sb.AppendLine();
         }
         
-        sb.AppendLine($"---@enum (key) {classFullName}");
-        foreach (var csTypeField in csEnumType.Fields)
-        {
-            sb.AppendLine($"---| CS.{csEnumType.Name}.{csTypeField.Name}");
-        }
+        //sb.AppendLine($"---@enum (key) {classFullName}");
+        //foreach (var csTypeField in csEnumType.Fields)
+        //{
+        //    sb.AppendLine($"---| CS.{csEnumType.Name}.{csTypeField.Name}");
+        //}
     }
 
     private void HandleCsDelegate(CSDelegate csDelegate, StringBuilder sb)
     {
         var paramsString = string.Join(",",
             csDelegate.InvokeMethod.Params.Select(it => $"{it.Name}: {Util.CovertToLuaTypeName(it.TypeName)}"));
-        sb.AppendLine($"---@alias {csDelegate.Name} fun({paramsString}): {Util.CovertToLuaTypeName(csDelegate.InvokeMethod.ReturnTypeName)}");
+        var classFullName = csDelegate.Name;
+        if (csDelegate.Namespace.Length > 0)
+        {
+            classFullName = $"{csDelegate.Namespace}.{csDelegate.Name}";
+        }
+        sb.AppendLine($"---@alias {classFullName} fun({paramsString}): {Util.CovertToLuaTypeName(csDelegate.InvokeMethod.ReturnTypeName)}");
     }
 
     private List<CSTypeMethod> GetCtorList(CSClassType csClassType)

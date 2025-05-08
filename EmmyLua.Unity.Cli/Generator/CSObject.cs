@@ -34,16 +34,20 @@ public class CSTypeMethod : CSTypeBase
     public List<CSParam> Params = [];
 
     public bool IsStatic;
+
+    public MethodKind Kind { get; set; }
 }
 
 public interface IHasNamespace
 {
     public string Namespace { get; set; }
+    public bool IsNamespace { get; set; }
 }
 
 public class CSType : CSTypeBase, IHasNamespace
 {
     public string Namespace { get; set; } = string.Empty;
+    public bool IsNamespace { get; set; } = false;
 }
 
 public interface IHasFields

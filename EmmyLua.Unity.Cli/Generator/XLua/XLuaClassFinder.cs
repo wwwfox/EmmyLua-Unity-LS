@@ -22,7 +22,7 @@ public class XLuaClassFinder
                 var typeSymbol = semanticModel.GetDeclaredSymbol(typeDeclaration) as INamedTypeSymbol;
 
                 // 查找类上的属性
-                if (typeSymbol?.GetAttributes().Any(attr => attr.AttributeClass?.Name == "LuaCallCSharpAttribute") ==
+                if (typeSymbol?.GetAttributes().Any(attr => attr.AttributeClass?.Name == "LuaCallCSharpAttribute" || attr.AttributeClass?.Name == "CSharpCallLuaAttribute") ==
                     true)
                 {
                     luaCallCSharpMembers.Add(typeSymbol);
@@ -41,7 +41,7 @@ public class XLuaClassFinder
                             } fieldSymbol)
                         {
                             if (fieldSymbol.GetAttributes()
-                                .Any(attr => attr.AttributeClass?.Name == "LuaCallCSharpAttribute"))
+                                .Any(attr => attr.AttributeClass?.Name == "LuaCallCSharpAttribute" || attr.AttributeClass?.Name == "CSharpCallLuaAttribute"))
                             {
                                 luaCallCSharpMembers.AddRange(AnalyzeLuaCallCSharpMembers(fieldSymbol, semanticModel));
                             }
@@ -51,7 +51,7 @@ public class XLuaClassFinder
             }
         }
 
-        return luaCallCSharpMembers;
+        return luaCallCSharpMembers.Distinct().ToList();
     }
 
     // 通过分析列表获得所有类
