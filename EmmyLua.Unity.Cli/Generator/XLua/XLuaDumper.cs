@@ -241,43 +241,61 @@ public class XLuaDumper : IDumper
 
                 if (param.Kind != RefKind.Out)
                 {
+                    var name = Util.CovertToLuaCompactName(param.IsParams ? "..." : param.Name);
+                    var typeName = Util.CovertToLuaTypeName(param.IsParams ? param.TypeName.Replace("[]","") : param.TypeName);
                     var comment = param.Comment;
+                    if (param.Nullable)
+                    {
+                        typeName += "?";
+                    }
                     if (comment.Length > 0)
                     {
                         comment = comment.Replace("\n", "\n---");
-                        sb.AppendLine($"---@param {param.Name} {Util.CovertToLuaTypeName(param.TypeName)} {comment}");
+                        sb.AppendLine($"---@param {name} {typeName} {comment}");
                     }
                     else
                     {
-                        sb.AppendLine($"---@param {param.Name} {Util.CovertToLuaTypeName(param.TypeName)}");
+                        sb.AppendLine($"---@param {name} {typeName}");
                     }
                 }
             }
-
-            sb.Append($"---@return {Util.CovertToLuaTypeName(csTypeMethod.ReturnTypeName)}");
-            if (outParams.Count > 0)
+            if (outParams.Count == 0)
             {
+                sb.Append($"---@return {Util.CovertToLuaTypeName(csTypeMethod.ReturnTypeName)}");
+            }
+            else
+            {
+                if (csTypeMethod.ReturnTypeName == "void")
+                {
+                    sb.Append($"---@return ");
+                }
+                else
+                {
+                    sb.Append($"---@return {Util.CovertToLuaTypeName(csTypeMethod.ReturnTypeName)}, ");
+                }
                 for (var i = 0; i < outParams.Count; i++)
                 {
-                    sb.Append($"{outParams[i].TypeName}");
+                    sb.Append($"{Util.CovertToLuaTypeName(outParams[i].TypeName)}");
                     if (i < outParams.Count - 1)
                     {
                         sb.Append(", ");
                     }
                 }
+            }
 
-                sb.AppendLine();
-            }
-            else
-            {
-                sb.AppendLine();
-            }
+            sb.AppendLine();
 
             var dot = csTypeMethod.IsStatic ? "." : ":";
             sb.Append($"function {csClassType.Name}{dot}{csTypeMethod.Name}(");
             for (var i = 0; i < csTypeMethod.Params.Count; i++)
             {
-                sb.Append(Util.CovertToLuaCompactName(csTypeMethod.Params[i].Name));
+                if (csTypeMethod.Params[i].IsParams)
+                {
+                    sb.Append("...");   
+                }else
+                {
+                    sb.Append(Util.CovertToLuaCompactName(csTypeMethod.Params[i].Name));
+                }
                 if (i < csTypeMethod.Params.Count - 1)
                 {
                     sb.Append(", ");
@@ -390,11 +408,22 @@ public class XLuaDumper : IDumper
         var paramsString = string.Join(",",
             csDelegate.InvokeMethod.Params.Select(it => $"{it.Name}: {Util.CovertToLuaTypeName(it.TypeName)}"));
         var classFullName = csDelegate.Name;
+        var outParams = csDelegate.InvokeMethod.Params.Where(it => it.Kind is RefKind.Out or RefKind.Ref).ToList();
+
         if (csDelegate.Namespace.Length > 0)
         {
             classFullName = $"{csDelegate.Namespace}.{csDelegate.Name}";
         }
-        sb.AppendLine($"---@alias {classFullName} fun({paramsString}): {Util.CovertToLuaTypeName(csDelegate.InvokeMethod.ReturnTypeName)}");
+        List<string> ret = outParams.Select(it => $"{Util.CovertToLuaTypeName(it.TypeName)}").ToList();
+        if (ret.Count == 0 || csDelegate.InvokeMethod.ReturnTypeName != "void")
+        {
+            ret.Insert(0, Util.CovertToLuaTypeName(csDelegate.InvokeMethod.ReturnTypeName));
+        }
+        
+        sb.AppendLine($"---@alias {classFullName}Ty fun({paramsString}): {string.Join(",", ret)}");
+        sb.AppendLine();
+        sb.AppendLine($"---@interface {classFullName}");
+        sb.AppendLine($"---@overload fun(func: fun({paramsString}): {string.Join(",", ret)}):any");
     }
 
     private List<CSTypeMethod> GetCtorList(CSClassType csClassType)

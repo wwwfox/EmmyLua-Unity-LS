@@ -101,6 +101,10 @@ public class CSharpAnalyzer
         method.IsStatic = methodSymbol.IsStatic;
         method.Kind = methodSymbol.MethodKind;
         method.ReturnTypeName = methodSymbol.ReturnType.ToDisplayString();
+        if (methodSymbol.ReturnType.TypeKind == TypeKind.Delegate && !methodSymbol.ReturnType.ToDisplayString().Contains('>'))
+        {
+            method.ReturnTypeName = method.ReturnTypeName + "Ty";
+        }
         if (methodSymbol.IsExtensionMethod)
         {
             method.IsStatic = false;
@@ -115,7 +119,7 @@ public class CSharpAnalyzer
                     Name = it.Name,
                     Nullable = it.IsOptional,
                     Kind = it.RefKind,
-                    TypeName = it.Type.ToDisplayString(),
+                    TypeName = it.Type.TypeKind == TypeKind.Delegate && !it.Type.ToDisplayString().Contains('>') ? it.Type.ToDisplayString() + "Ty" : it.Type.ToDisplayString(),
                     Comment = xmlDictionary.GetValueOrDefault(it.Name, "")
                 }).ToList();
             string fullName = "";
@@ -148,7 +152,8 @@ public class CSharpAnalyzer
                     Name = it.Name,
                     Nullable = it.IsOptional,
                     Kind = it.RefKind,
-                    TypeName = it.Type.ToDisplayString(),
+                    IsParams = it.IsParams,
+                    TypeName = it.Type.TypeKind == TypeKind.Delegate && !it.Type.ToDisplayString().Contains('>') ? it.Type.ToDisplayString() + "Ty" : it.Type.ToDisplayString(),
                     Comment = xmlDictionary.GetValueOrDefault(it.Name, "")
                 }).ToList();
             csClassType.Methods.Add(method);
@@ -257,13 +262,17 @@ public class CSharpAnalyzer
         {
             var method = new CSTypeMethod();
             method.ReturnTypeName = invokeMethod.ReturnType.ToDisplayString();
+            if (invokeMethod.ReturnType.TypeKind == TypeKind.Delegate && !invokeMethod.ReturnType.ToDisplayString().Contains('>'))
+            {
+                method.ReturnTypeName = method.ReturnTypeName + "Ty";
+            }
             method.Params = invokeMethod.Parameters
                 .Select(it => new CSParam()
                 {
                     Name = it.Name,
                     Nullable = it.IsOptional,
                     Kind = it.RefKind,
-                    TypeName = it.Type.ToDisplayString()
+                    TypeName = it.Type.TypeKind == TypeKind.Delegate && !it.Type.ToDisplayString().Contains('>') ? it.Type.ToDisplayString() + "Ty" : it.Type.ToDisplayString()
                 }).ToList();
             csType.InvokeMethod = method;
         }

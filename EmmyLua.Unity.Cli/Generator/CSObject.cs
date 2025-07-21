@@ -22,6 +22,8 @@ public class CSParam
 
     public RefKind Kind { get; set; } = RefKind.None;
 
+    public bool IsParams { get; set; } = false;
+
     public string TypeName { get; set; } = string.Empty;
     
     public string Comment { get; set; } = string.Empty;

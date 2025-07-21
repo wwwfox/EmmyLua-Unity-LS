@@ -29,11 +29,21 @@ public static class Util
         return name switch
         {
             "int" => "integer",
+            "long" => "integer",
+            "ulong" => "integer",
             "float" => "number",
             "double" => "number",
+            "sbyte" => "number",
+            "byte" => "number",
+            "short" => "number",
+            "ushort" => "number",
+            "uint" => "number",
+            "char" => "number",
             "bool" => "boolean",
             "string" => "string",
+            "byte[]" => "string",
             "object" => "table",
+            "decimal" => "userdata",
             _ => name
         };
     }
